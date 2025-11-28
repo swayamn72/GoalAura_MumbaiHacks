@@ -1,7 +1,8 @@
-# TODO: Add Redirect to Complete Profile on First Signup
+# Dream Mapping Integration Plan
 
-- [x] Modify PublicRoute in App.jsx to redirect to '/complete-profile' when user is authenticated and on '/signup' path
-- [x] Add useLocation import to App.jsx
-- [x] Remove manual navigation from Signup.jsx (handled by PublicRoute)
-- [x] Test the signup flow to ensure redirection works correctly (Ready for user testing)
-- [x] Verify that after completing profile, user is redirected to home page (CompleteProfile component already navigates to '/' on submit)
+## Tasks
+- [ ] Add estimated_budget field to DreamMap.jsx form
+- [ ] Replace mock API call with real fetch to FastAPI endpoint
+- [ ] Update component to handle DreamRoadmap response structure
+- [ ] Add error handling for API failures
+- [ ] Test integration with FastAPI server
