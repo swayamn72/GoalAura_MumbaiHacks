@@ -9,6 +9,7 @@ import MyProfilePage from './pages/MyProfilePage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
 import DreamMapPage from './pages/DreamMapPage';
 import TransactionHistoryPage from './pages/TransactionHistoryPage';
+import SocialCirclesPage from './pages/SocialCirclesPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Protected Route component
@@ -55,6 +56,7 @@ function App() {
           <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfilePage /></ProtectedRoute>} />
           <Route path="/dream-map" element={<ProtectedRoute><DreamMapPage /></ProtectedRoute>} />
           <Route path="/transactions" element={<ProtectedRoute><TransactionHistoryPage /></ProtectedRoute>} />
+          <Route path="/social-circles" element={<ProtectedRoute><SocialCirclesPage /></ProtectedRoute>} />
         </Routes>
         <ToastContainer />
       </Router>

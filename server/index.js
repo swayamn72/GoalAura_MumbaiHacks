@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.routes.js";
 import profileRoutes from "./routes/profile.routes.js";
 import transactionRoutes from "./routes/transaction.route.js";
 import goalRoutes from "./routes/goal.routes.js";
+import socialCirclesRoutes from "./routes/social-circles.routes.js";
 
 dotenv.config();
 connectDB();
@@ -22,6 +23,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/goals', goalRoutes);
+app.use('/api/social-circles', socialCirclesRoutes);
 
 app.get("/", (req, res) => {
   res.send("API Running");
