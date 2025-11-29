@@ -1,0 +1,365 @@
+# GoalAura_AI/app/main.py
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+import uvicorn
+import os
+
+# Import the core logic and models
+# GoalAura_AI/app/main.py (CORRECTED IMPORT)
+from core.agent import generate_dynamic_roadmap
+from core.comparison_agent import generate_comparison_insights
+from core.opportunity_cost_agent import orchestrate_opportunity_cost
+from core.income_growth_agent import analyze_income_growth_paths, format_income_growth_report
+from core.models import DreamRoadmap, UserComparisonInsights, IncomeGrowthRequest
+from google import genai
+from google.genai import types
+import json
+
+
+if os.environ.get("GEMINI_API_KEY"):
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+else:
+    client = None
+
+
+# --- 1. Define the Input Schema for the API ---
+class DreamRequest(BaseModel):
+    """Schema for the data sent from the mobile app to the API."""
+    dream_text: str = Field(..., description="The user's natural language goal/dream.", example="I want to buy a Royal Enfield bike")
+    estimated_budget: float = Field(..., gt=0, description="User's estimated budget for the dream in INR.", example=150000)
+    user_monthly_income: float = Field(..., gt=0, description="The user's monthly income in INR.", example=50000)
+    target_months: int = Field(..., gt=0, description="Number of months to achieve the dream.", example=12)
+
+
+class ComparisonRequest(BaseModel):
+    """Schema for user comparison analysis."""
+    current_user_info: str = Field(..., description="Current user info in format: job_salary_savings", example="SoftwareEngineer_80000_50000")
+    other_user_info: str = Field(..., description="Comparison user info in format: job_salary_savings", example="SoftwareEngineer_85000_65000")
+    current_user_transactions: str = Field(..., description="Current user's transaction data in CSV format as string")
+    other_user_transactions: str = Field(..., description="Comparison user's transaction data in CSV format as string")
+
+# --- 2. Initialize FastAPI App ---
+app = FastAPI(
+    title="GoalAura AI Backend",
+    description="Dynamic AI API for personalized dream roadmaps.",
+    version="1.0.0"
+)
+
+# --- CORS Configuration ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- 3. Define the API Endpoint ---
+@app.post("/api/dream-map", response_model=DreamRoadmap)
+async def create_dream_map(request: DreamRequest):
+    """
+    Receives the user's dream with budget and timeline,
+    returns brutally honest, realistic roadmap with detailed action plan.
+    """
+    try:
+        # Call the enhanced AI logic
+        roadmap = generate_dynamic_roadmap(
+            dream_text=request.dream_text,
+            estimated_budget=request.estimated_budget,
+            user_income=request.user_monthly_income,
+            target_months=request.target_months
+        )
+
+        # FastAPI automatically converts the Pydantic object to JSON
+        return roadmap
+
+    except Exception as e:
+        print(f"Error processing dream map request: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while generating the roadmap: {str(e)}"
+        )
+
+
+
+
+# --- New Input Schema ---
+class PurchaseRequest(BaseModel):
+    """Schema for a purchase decision."""
+    purchase_item: str = Field(..., description="The name or description of the item being considered for purchase.", example="iPhone 15")
+    purchase_cost_inr: float = Field(..., gt=0, description="Cost of the item being considered.")
+    user_monthly_income: float = Field(..., gt=0, description="User's current monthly income in INR.")
+
+# --- New Endpoint for Opportunity Cost ---
+# Add this endpoint below the existing create_dream_map function
+@app.post("/api/opportunity-cost")
+async def get_opportunity_cost(request: PurchaseRequest):
+    """
+    Calculates the opportunity cost (time vs. investment) for an impulse purchase.
+    """
+    try:
+        if not os.environ.get("GEMINI_API_KEY"):
+            raise HTTPException(
+                status_code=500, 
+                detail="Server error: GEMINI_API_KEY not configured."
+            )
+            
+        # 1. Calculate Hourly Wage (Assuming 20 working days * 8 hours = 160 hours/month)
+        # This makes the feature instantly personalized.
+        HOURS_PER_MONTH = 160.0
+        hourly_wage = request.user_monthly_income / HOURS_PER_MONTH
+        
+        # 2. Call the dedicated Agent function
+        visualizer_text = orchestrate_opportunity_cost(
+            purchase_item=request.purchase_item,
+            purchase_cost=request.purchase_cost_inr,
+            user_hourly_wage=hourly_wage
+        )
+        
+        return {"visualizer_message": visualizer_text}
+
+    except Exception as e:
+        print(f"Error processing opportunity cost request: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"An error occurred while calculating opportunity cost: {str(e)}"
+        )
+
+
+
+
+
+class QuantumDecisionRequest(BaseModel):
+    """Schema for Quantum Decision Tree evaluation."""
+    situation: str = Field(
+        ...,
+        description="A natural language description of the decision or dilemma.",
+        example="Should I buy a gaming laptop or save the money for relocation?"
+    )
+    user_monthly_income: float = Field(
+        ...,
+        gt=0,
+        description="User's monthly income in INR."
+    )
+    user_savings_inr: float = Field(
+        ...,
+        ge=0,
+        description="User's current savings."
+    )
+    risk_profile: str = Field(
+        ..., 
+        description="User's risk preference: low, medium, or high.",
+        example="medium"
+    )
+
+
+@app.post("/api/quantum-decision-tree")
+async def quantum_decision_tree(request: QuantumDecisionRequest):
+    """
+    Evaluates a user's dilemma using a Quantum Decision Tree (QDT) model.
+    Uses a single Gemini call and behaves like a professional financial advisor.
+    """
+    try:
+        if not os.environ.get("GEMINI_API_KEY"):
+            raise HTTPException(
+                status_code=500,
+                detail="Server error: GEMINI_API_KEY not configured."
+            )
+
+        # --- Construct the QDT Prompt ---
+        system_instruction = (
+            "You are GoalAura's Quantum Decision Tree Engine: a professional "
+            "financial advisor trained in behavioral psychology, risk modeling, "
+            "loss-aversion theory, decision science, and long-term planning. "
+            "Your job is to evaluate dilemmas and output a structured recommendation."
+        )
+
+        prompt = f"""
+User Situation: {request.situation}
+Monthly Income: ₹{request.user_monthly_income:,.0f}
+Current Savings: ₹{request.user_savings_inr:,.0f}
+Risk Profile: {request.risk_profile}
+
+TASK:
+Evaluate the scenario using a Quantum Decision Tree (QDT), where each branch
+represents a probabilistic mental model:
+
+1. Immediate Gratification Path
+2. Delayed Gratification Path
+3. Risk-Averse Conservative Path
+4. High-Utility Strategic Path
+
+Return the output strictly in this JSON structure:
+
+{{
+  "decision_rating": "Smart | Neutral | Risky",
+  "recommended_choice": "string",
+  "confidence_score": 0-100,
+  "reasoning": {{
+    "financial_factors": "string",
+    "psychological_factors": "string",
+    "opportunity_cost_view": "string",
+    "risk_analysis": "string"
+  }},
+  "quantum_paths": [
+    {{
+      "path_name": "Immediate Gratification",
+      "outcome": "string",
+      "probability": "percentage"
+    }},
+    {{
+      "path_name": "Delayed Gratification",
+      "outcome": "string",
+      "probability": "percentage"
+    }},
+    {{
+      "path_name": "Conservative Path",
+      "outcome": "string",
+      "probability": "percentage"
+    }},
+    {{
+      "path_name": "Strategic Path",
+      "outcome": "string",
+      "probability": "percentage"
+    }}
+  ],
+  "final_advice": "string"
+}}
+        """
+
+        # --- GEMINI CALL (Only One Call) ---
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json"
+            )
+        )
+
+
+        result = json.loads(response.text)
+        return result
+
+    except Exception as e:
+        print(f"QDT error: {e}")
+        raise HTTPException(status_code=500, detail=f"QDT processing error: {str(e)}")
+
+
+
+
+
+
+
+
+@app.post("/api/compare-users", response_model=UserComparisonInsights)
+async def compare_users(request: ComparisonRequest):
+    """
+    Compares two users' financial profiles and transaction patterns.
+    Returns personalized insights and recommendations for the current user.
+    """
+    try:
+        # Call the comparison agent
+        insights = generate_comparison_insights(
+            current_user_info=request.current_user_info,
+            other_user_info=request.other_user_info,
+            current_user_transactions=request.current_user_transactions,
+            other_user_transactions=request.other_user_transactions
+        )
+        
+        return insights
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid input format: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Error processing user comparison: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while comparing users: {str(e)}"
+        )
+
+
+@app.post("/api/income-growth")
+async def income_growth_analysis(request: IncomeGrowthRequest):
+    """
+    Analyzes user's current income and profession to suggest structured paths for income growth.
+    Returns detailed recommendations including skill upgrades, side income opportunities, and career advancement paths.
+    """
+    try:
+        if not os.environ.get("GEMINI_API_KEY"):
+            raise HTTPException(
+                status_code=500,
+                detail="Server error: GEMINI_API_KEY not configured."
+            )
+        
+        # Call the income growth agent
+        analysis = analyze_income_growth_paths(
+            current_income=request.current_income,
+            profession=request.profession,
+            current_skills=request.current_skills
+        )
+        
+        return analysis
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid input: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Error processing income growth analysis: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while analyzing income growth: {str(e)}"
+        )
+
+
+@app.post("/api/income-growth-report")
+async def income_growth_report(request: IncomeGrowthRequest):
+    """
+    Generates a formatted text report for income growth analysis.
+    Returns a human-readable report instead of JSON.
+    """
+    try:
+        if not os.environ.get("GEMINI_API_KEY"):
+            raise HTTPException(
+                status_code=500,
+                detail="Server error: GEMINI_API_KEY not configured."
+            )
+        
+        # Call the income growth agent
+        analysis = analyze_income_growth_paths(
+            current_income=request.current_income,
+            profession=request.profession,
+            current_skills=request.current_skills
+        )
+        
+        # Format as readable report
+        report = format_income_growth_report(analysis)
+        
+        return {"report": report}
+    
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid input: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Error processing income growth report: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"An error occurred while generating income growth report: {str(e)}"
+        )
+
+# --- 4. Running the Server (for local testing/hackathon deployment) ---
+if __name__ == "__main__":
+    # Ensure environment variables are loaded if running this file directly
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # Run the server on http://127.0.0.1:8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
