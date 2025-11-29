@@ -3,15 +3,20 @@ import {
   Target, Sparkles, TrendingUp, Calendar, Wallet, CheckCircle,
   ArrowRight, Lightbulb, PieChart, Clock, DollarSign, Award
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function DreamMap() {
+  const { token } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [dreamRoadmap, setDreamRoadmap] = useState(null);
+  const [incomeGrowthReport, setIncomeGrowthReport] = useState(null);
   const [formData, setFormData] = useState({
     dream_text: '',
     estimated_budget: '',
     user_income: '',
-    target_months: ''
+    target_months: '',
+    profession: '',
+    years_of_experience: ''
   });
 
   const handleInputChange = (e) => {
@@ -19,6 +24,32 @@ export default function DreamMap() {
       ...formData,
       [e.target.name]: e.target.value
     });
+  };
+
+  const fetchIncomeGrowthReport = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/income-growth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_income: parseFloat(formData.user_income),
+          profession: formData.profession || 'Unknown',
+          years_of_experience: parseInt(formData.years_of_experience) || 0,
+          current_skills: [], // Can be extended later
+          location: 'India'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Income growth API failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setIncomeGrowthReport(data);
+    } catch (error) {
+      console.error('Error fetching income growth report:', error);
+      // Don't show alert, just log the error
+    }
   };
 
   const handleGenerateRoadmap = async () => {
@@ -58,12 +89,50 @@ export default function DreamMap() {
       };
 
       setDreamRoadmap(mappedRoadmap);
+
+      // If the dream is not realistic, fetch income growth suggestions
+      if (!mappedRoadmap.isRealistic) {
+        fetchIncomeGrowthReport();
+      }
+
       setIsGenerating(false);
     } catch (error) {
       console.error('Error generating roadmap:', error);
       setIsGenerating(false);
       // You could add a state for error messages and display them to the user
       alert('Failed to generate roadmap. Please check if the server is running and try again.');
+    }
+  };
+
+  const handleSaveGoal = async () => {
+    if (!token) {
+      alert('Please login to save goals');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:3000/api/goals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          dreamText: formData.dream_text,
+          estimatedBudget: parseFloat(formData.estimated_budget),
+          roadmap: dreamRoadmap
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save goal: ${response.status}`);
+      }
+
+      const data = await response.json();
+      alert('Goal saved successfully!');
+    } catch (error) {
+      console.error('Error saving goal:', error);
+      alert('Failed to save goal. Please try again.');
     }
   };
 
@@ -174,6 +243,39 @@ export default function DreamMap() {
                     months
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Profession */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Profession
+                </label>
+                <input
+                  type="text"
+                  name="profession"
+                  value={formData.profession}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Software Engineer, Teacher, Doctor"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              {/* Years of Experience */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Years of Experience
+                </label>
+                <input
+                  type="number"
+                  name="years_of_experience"
+                  value={formData.years_of_experience}
+                  onChange={handleInputChange}
+                  placeholder="5"
+                  min="0"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition-all"
+                />
               </div>
             </div>
 
@@ -371,7 +473,10 @@ export default function DreamMap() {
                   Save this roadmap and track your progress with GoalAura
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <button className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-8 py-3 rounded-full font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center justify-center space-x-2">
+                  <button
+                    onClick={handleSaveGoal}
+                    className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-8 py-3 rounded-full font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center justify-center space-x-2"
+                  >
                     <Target className="w-5 h-5" />
                     <span>Save to My Goals</span>
                   </button>
@@ -396,6 +501,36 @@ export default function DreamMap() {
                 </div>
               </div>
             </div>
+
+            {/* Income Growth Report */}
+            {incomeGrowthReport && (
+              <div className="bg-gradient-to-r from-green-50 to-teal-50 border-l-4 border-green-500 rounded-xl p-6">
+                <div className="flex items-start space-x-3">
+                  <TrendingUp className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                  <div>
+                    <h4 className="font-bold text-gray-900 mb-2">📈 Income Growth Opportunities</h4>
+                    <p className="text-gray-700 mb-4">
+                      Since your dream seems challenging with your current income, here are some ways to boost your earnings:
+                    </p>
+                    <div className="space-y-3">
+                      {incomeGrowthReport.suggestions && incomeGrowthReport.suggestions.map((suggestion, index) => (
+                        <div key={index} className="flex items-start space-x-2">
+                          <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                          <p className="text-gray-700 text-sm">{suggestion}</p>
+                        </div>
+                      ))}
+                      {incomeGrowthReport.expected_income_increase && (
+                        <div className="mt-4 p-3 bg-green-100 rounded-lg">
+                          <p className="text-green-800 font-medium">
+                            Expected Income Increase: ₹{incomeGrowthReport.expected_income_increase.toLocaleString('en-IN')}/month
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
